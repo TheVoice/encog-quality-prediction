@@ -1,5 +1,7 @@
 package org.encog.encog_quality_prediction;
 
+import java.io.BufferedReader;
+import java.io.FileReader;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -29,12 +31,42 @@ public class BayesianFilter {
 			"6 2 8",
 			"6 11 12"
 	};
+	
+	public List<String> goodImageName;
+	
+	public List<String> badImageName;
 
 	private int k;
 	
 	private BagOfWords goodBag;
 	private BagOfWords badBag;
 	private BagOfWords totalBag;
+	
+	public int accurate;
+	public int total;
+	
+	public void loadCsvFile(String filename){
+		BufferedReader reader;
+		String line;
+		String separator = ",";
+		goodImageName = new ArrayList<String>();
+		badImageName = new ArrayList<String>();
+		try{
+			reader = new BufferedReader(new FileReader(filename));
+			reader.readLine();//skip header
+			while((line = reader.readLine())!=null){
+				String[] entry = line.split(separator);
+		
+				if("1".equals(entry[9])){
+					if(!entry[6].isEmpty()) goodImageName.add(entry[6]);
+				}else{
+					if(!entry[6].isEmpty()) badImageName.add(entry[6]);
+				}
+			}
+		}catch(Exception e){
+			e.printStackTrace();
+		}
+	}
 	
 	public void init(int theK) {
 		
@@ -45,12 +77,12 @@ public class BayesianFilter {
 		this.totalBag = new BagOfWords(this.k);
 
 		
-		for(String line: GOOD_DATA) {
+		for(String line: goodImageName) {
 			goodBag.process(line);
 			totalBag.process(line);
 		}
 		
-		for(String line: BAD_DATA) {
+		for(String line: badImageName) {
 			badBag.process(line);
 			totalBag.process(line);
 		}
@@ -102,8 +134,8 @@ public class BayesianFilter {
 		EnumerationQuery query = new EnumerationQuery(network);
 		
 		CalcProbability messageProbability = new CalcProbability(this.k);
-		messageProbability.addClass(GOOD_DATA.length);
-		messageProbability.addClass(BAD_DATA.length);
+		messageProbability.addClass(goodImageName.size());
+		messageProbability.addClass(badImageName.size());
 		double probSpam = messageProbability.calculate(0);
 
 		goodEvent.getTable().addLine(probSpam, true);
@@ -126,11 +158,27 @@ public class BayesianFilter {
 		return query.getProbability();		
 	}
 	
-	private static final String FILENAME = "bayes_test.csv";
+	private static final String TRAINING_FILE = "training_without_test.csv";
+	private static final String TESTING_FILE = "bayes_test.csv";
 	
-	public void test(String message) {
+	public void test(String message,boolean actualGood) {
 		double d = probabilityGood(message);
-		System.out.println("Probability of image with caption \"" + message + "\" being good is " + Format.formatPercent(d));
+		System.out.print("Probability of image with name \"" + message + "\" being good is " + Format.formatPercent(d));
+		if(d>=50.0){
+			if(actualGood){
+				System.out.println(" CORRECT");
+				this.accurate++;
+			}else{
+				System.out.println(" INCORRECT");
+			}
+		}else{
+			if(actualGood){
+				System.out.println(" INCORRECT");
+			}else{
+				System.out.println(" CORRECT");
+				this.accurate++;
+			}
+		}
 	}
 	
 	public static void main(String args[]){
@@ -138,17 +186,45 @@ public class BayesianFilter {
 		
 		
 		BayesianFilter program = new BayesianFilter();
+		program.loadCsvFile(TRAINING_FILE);
+		
+		BufferedReader reader;
+		String separator = ",";
+		String line;
 		
 		System.out.println("Using Laplace of 0");
 		program.init(0);
-		for(int i=1;i<=12;i++){
-			program.test(""+i);
+		program.total = 0;
+		program.accurate = 0;
+		try{
+			reader = new BufferedReader(new FileReader(TESTING_FILE));
+			reader.readLine();//skip header
+			while((line = reader.readLine())!=null){
+				String[] entry = line.split(separator);
+				program.total++;
+				program.test(entry[6],"1".equals(entry[9]));
+			}
+		}catch(Exception e){
+			e.printStackTrace();
 		}
+		System.out.println(program.accurate + "/" + program.total);
 		
 		System.out.println("Using Laplace of 1");
 		program.init(1);
-		for(int i=1;i<=12;i++){
-			program.test(""+i);
+		program.total = 0;
+		program.accurate = 0;
+		try{
+			reader = new BufferedReader(new FileReader(TESTING_FILE));
+			reader.readLine();//skip header
+			while((line = reader.readLine())!=null){
+				String[] entry = line.split(separator);
+				program.total++;
+				program.test(entry[6],"1".equals(entry[9]));
+			}
+		}catch(Exception e){
+			e.printStackTrace();
 		}
+		System.out.println(program.accurate + "/" + program.total);
+		
 	}
 }
