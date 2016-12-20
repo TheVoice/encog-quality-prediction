@@ -13,6 +13,7 @@ import org.encog.ml.bayesian.BayesianEvent;
 import org.encog.ml.bayesian.BayesianNetwork;
 import org.encog.ml.bayesian.EventType;
 import org.encog.ml.bayesian.query.enumerate.EnumerationQuery;
+import org.encog.ml.bayesian.query.sample.SamplingQuery;
 import org.encog.ml.data.MLDataSet;
 import org.encog.util.Format;
 import org.encog.util.csv.CSVFormat;
@@ -20,34 +21,24 @@ import org.encog.util.simple.TrainingSetUtil;
 import org.encog.util.text.BagOfWords;
 
 public class BayesianFilter {
-	
-	public final static String[] GOOD_DATA = {
-			"1 2 3",
-			"4 3 5",
-			"3 6 5"
-	};
-	
-	public final static String[] BAD_DATA = {
-			"7 6 8",
-			"10 7 6",
-			"3 6 9",
-			"6 2 8",
-			"6 11 12"
-	};
-	
+
+	private static final int LAPLACE = 1;
+
+	private static final boolean TAKE_AVERAGE = true;
+
 	public List<String> goodImageTags;
-	
+
 	public List<String> badImageTags;
 
 	private int k;
-	
+
 	private BagOfWords goodBag;
 	private BagOfWords badBag;
 	private BagOfWords totalBag;
-	
+
 	public int accurate;
 	public int total;
-	
+
 	public void loadCsvFile(String filename){
 		BufferedReader reader;
 		String line;
@@ -59,7 +50,7 @@ public class BayesianFilter {
 			reader.readLine();//skip header
 			while((line = reader.readLine())!=null){
 				String[] entry = line.split(separator);
-		
+
 				if("1".equals(entry[9])){
 					if(!entry[6].isEmpty()) goodImageTags.add(entry[6]);
 					if(!entry[7].isEmpty()) goodImageTags.add(entry[7]);
@@ -74,30 +65,30 @@ public class BayesianFilter {
 			e.printStackTrace();
 		}
 	}
-	
+
 	public void init(int theK) {
-		
+
 		this.k = theK;
-		
+
 		this.goodBag = new BagOfWords(this.k);
 		this.badBag = new BagOfWords(this.k);
 		this.totalBag = new BagOfWords(this.k);
 
-		
+
 		for(String line: goodImageTags) {
 			goodBag.process(line);
 			totalBag.process(line);
 		}
-			
+
 		for(String line: badImageTags) {
 			badBag.process(line);
 			totalBag.process(line);
 		}
-		
+
 		this.badBag.setLaplaceClasses(totalBag.getUniqueWords());
 		this.goodBag.setLaplaceClasses(totalBag.getUniqueWords());		
 	}
-	
+
 	//funkcja do rozdzielania słów
 	public List<String> separateSpaces(String str) {
 		List<String> result = new ArrayList<String>();
@@ -118,28 +109,29 @@ public class BayesianFilter {
 		if (word.length() > 0) {
 			result.add(word.toString());
 		}
-		
+
 		return result;
 	}
-	
+
 	public double probabilityGood(String m) {
 		List<String> words = separateSpaces(m);
-		
+
 		BayesianNetwork network = new BayesianNetwork();
 		BayesianEvent goodEvent = network.createEvent("good");
-		
+
 		int index = 0;
 		for( String word: words) {
 			BayesianEvent event = network.createEvent(word+index);
 			network.createDependency(goodEvent, event);
 			index++;
 		}
-		
+
 		network.finalizeStructure();
-		
+
+		//SamplingQuery is too complicated for our example
 		//SamplingQuery query = new SamplingQuery(network);
 		EnumerationQuery query = new EnumerationQuery(network);
-		
+
 		CalcProbability messageProbability = new CalcProbability(this.k);
 		messageProbability.addClass(goodImageTags.size());
 		messageProbability.addClass(badImageTags.size());
@@ -148,7 +140,7 @@ public class BayesianFilter {
 		goodEvent.getTable().addLine(probGood, true);
 		query.defineEventType(goodEvent, EventType.Outcome);
 		query.setEventValue(goodEvent, true);
-				
+
 		index = 0;
 		for( String word: words) {
 			String word2 = word+index;
@@ -164,10 +156,10 @@ public class BayesianFilter {
 		query.execute();
 		return query.getProbability();		
 	}
-	
+
 	private static final String TRAINING_FILE = "training_without_test.csv";
 	private static final String TESTING_FILE = "bayes_test.csv";
-	
+
 	public void test(String message,boolean actualGood) {
 		double d = probabilityGood(message);
 		System.out.print("Probability of image with name \"" + message + "\" being good is " + Format.formatPercent(d));
@@ -187,25 +179,25 @@ public class BayesianFilter {
 			}
 		}
 	}
-	
-	
-	
+
+
+
 	public static void main(String args[]){
 		//final MLDataSet trainingSet = TrainingSetUtil.loadCSVTOMemory(CSVFormat.ENGLISH, FILENAME, true, 1, 1);
-		
-		
+
+
 		BayesianFilter program = new BayesianFilter();
 		program.loadCsvFile(TRAINING_FILE);
-		
+
 		BufferedReader reader;
 		String separator = ",";
 		String line;
 		PrintWriter writer = null;
 		Date date = new Date();
 		SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd_HH-mm-ss");
-		
-		System.out.println("Using Laplace of 0");
-		program.init(0);
+
+		System.out.println("Using Laplace of "+LAPLACE);
+		program.init(LAPLACE);
 		program.total = 0;
 		program.accurate = 0;
 		try{
@@ -216,35 +208,19 @@ public class BayesianFilter {
 				String[] entry = line.split(separator);
 				program.total++;
 				//program.test(entry[6],"1".equals(entry[9]));
-				program.testLine(entry,writer);
+				program.writeLineToOutput(entry,writer);
 			}
 		}catch(Exception e){
 			e.printStackTrace();
 		}finally{
 			writer.close();
 		}
+		System.out.println("DONE");
 		//System.out.println(program.accurate + "/" + program.total);
-		/*
-		System.out.println("Using Laplace of 1");
-		program.init(1);
-		program.total = 0;
-		program.accurate = 0;
-		try{
-			reader = new BufferedReader(new FileReader(TESTING_FILE));
-			reader.readLine();//skip header
-			while((line = reader.readLine())!=null){
-				String[] entry = line.split(separator);
-				program.total++;
-				program.test(entry[6],"1".equals(entry[9]));
-			}
-		}catch(Exception e){
-			e.printStackTrace();
-		}
-		System.out.println(program.accurate + "/" + program.total);
-		*/
+
 	}
 
-	private void testLine(String[] entry, PrintWriter writer) {
+	private void writeLineToOutput(String[] entry, PrintWriter writer) {
 		writer.print(entry[0]);
 		writer.print(",");
 		writer.print(entry[1]);
@@ -258,16 +234,35 @@ public class BayesianFilter {
 		writer.print(entry[5]);
 		writer.print(",");
 		double nameProb = probabilityGood(entry[6]);
-		String nameProbStr = (!Double.isNaN(nameProb)) ? String.format("%.8f", nameProb) : "";
-		writer.print(nameProbStr);
-		writer.print(",");
 		double descriptionProb = probabilityGood(entry[7]);
-		String descriptionProbStr = (!Double.isNaN(descriptionProb)) ? String.format("%.8f", descriptionProb) : "";
-		writer.print(descriptionProbStr);
-		writer.print(",");
 		double captionProb = probabilityGood(entry[8]);
-		String captionProbStr = (!Double.isNaN(captionProb)) ? String.format("%.8f", captionProb) : "";
-		writer.print(captionProbStr);
+		if(TAKE_AVERAGE){
+			double sum = 0.0;
+			double elements = 0.0;
+			if(!Double.isNaN(nameProb)){
+				sum += nameProb;
+				elements += 1.0;
+			}
+			if(!Double.isNaN(descriptionProb)){
+				sum += descriptionProb;
+				elements += 1.0;
+			}
+			if(!Double.isNaN(captionProb)){
+				sum += captionProb;
+				elements += 1.0;
+			}
+			if(elements!=0.0)
+				writer.print(String.format("%.8f", sum / elements));
+		}else{
+			String nameProbStr = (!Double.isNaN(nameProb)) ? String.format("%.8f", nameProb) : "";
+			writer.print(nameProbStr);
+			writer.print(",");
+			String descriptionProbStr = (!Double.isNaN(descriptionProb)) ? String.format("%.8f", descriptionProb) : "";
+			writer.print(descriptionProbStr);
+			writer.print(",");
+			String captionProbStr = (!Double.isNaN(captionProb)) ? String.format("%.8f", captionProb) : "";
+			writer.print(captionProbStr);
+		}
 		writer.print(",");
 		writer.print(entry[9]);
 		writer.println();
