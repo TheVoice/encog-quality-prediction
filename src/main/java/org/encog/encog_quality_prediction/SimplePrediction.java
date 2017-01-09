@@ -41,9 +41,11 @@ public class SimplePrediction {
       data.defineSourceColumn("width", 3, ColumnType.continuous);
       data.defineSourceColumn("height", 4, ColumnType.continuous);
       data.defineSourceColumn("size", 5, ColumnType.continuous);
+      data.defineSourceColumn("name", 6, ColumnType.continuous);
+      data.defineSourceColumn("description", 7, ColumnType.continuous);
 
       // Define the column that we are trying to predict.
-      ColumnDefinition outputColumn = data.defineSourceColumn("good", 9, ColumnType.nominal);
+      ColumnDefinition outputColumn = data.defineSourceColumn("good", 8, ColumnType.nominal);
 
       // Analyze the data, determine the min/max/mean/sd of every column.
       data.analyze();
@@ -59,7 +61,7 @@ public class SimplePrediction {
       // MLMethodFactor.TYPE_NEAT: NEAT Neural Network
       // MLMethodFactor.TYPE_PNN: Probabilistic Neural Network
       EncogModel model = new EncogModel(data);
-      model.selectMethod(data, MLMethodFactory.TYPE_SVM);
+      model.selectMethod(data, MLMethodFactory.TYPE_NEAT);
 
       // Send any output to the console.
       model.setReport(new ConsoleStatusReportable());
@@ -77,7 +79,7 @@ public class SimplePrediction {
       model.selectTrainingType(data);
 
       // Use a 5-fold cross-validated train. Return the best method found.
-      MLRegression bestMethod = (MLRegression) model.crossvalidate(15, true);
+      MLRegression bestMethod = (MLRegression) model.crossvalidate(5, true);
 
       // Display the training and validation errors.
       System.out.println("Training error: " + EncogUtility.calculateRegressionError(bestMethod, model.getTrainingDataset()));
@@ -96,7 +98,7 @@ public class SimplePrediction {
       // class. After you train, you can save the NormalizationHelper to later
       // normalize and denormalize your data.
       ReadCSV csv = new ReadCSV(trainFile, false, CSVFormat.DECIMAL_POINT);
-      String[] line = new String[5];
+      String[] line = new String[7];
       MLData input = helper.allocateInputVector();
 
       while (csv.next()) {
@@ -106,7 +108,10 @@ public class SimplePrediction {
         line[2] = csv.get(3);
         line[3] = csv.get(4);
         line[4] = csv.get(5);
-        String correct = csv.get(9);
+        line[5] = csv.get(6);
+        line[6] = csv.get(7);
+        
+        String correct = csv.get(8);
         helper.normalizeInputVector(line, input.getData(), false);
         MLData output = bestMethod.compute(input);
         String qualityChosen = helper.denormalizeOutputVectorToString(output)[0];
